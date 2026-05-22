@@ -103,6 +103,7 @@ def _parse_plain_line(tokens: list[str]) -> Optional[dict]:
         return {
             "timestamp": ts,
             "ts_format": ts_fmt,
+            "source": "plain",
             "ip": ip,
             "method": method,
             "path": path,
@@ -125,7 +126,9 @@ def _collect_extra_fields(tokens: list[str]) -> list:
 
     for tok in tokens:
         if not in_quote:
-            if tok.startswith('"') and not tok.endswith('"'):
+            if tok == '"':
+                fields.append(tok)
+            elif tok.startswith('"') and not tok.endswith('"'):
                 in_quote = True
                 buf = [tok]
             else:
@@ -213,6 +216,7 @@ def _parse_json_line(raw: str) -> Optional[dict]:
     return {
         "timestamp": ts,
         "ts_format": ts_fmt,
+        "source": "json",
         "ip": ip,
         "method": method,
         "path": path,

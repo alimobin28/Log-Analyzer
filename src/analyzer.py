@@ -171,18 +171,7 @@ def parse_quality_report(
             "alt_timestamp_formats": 0,
         }
 
-    # JSON log entries usually leave extra key=value fields
-    def looks_like_json(entry: dict) -> bool:
-
-        extra_fields = entry.get("extra_fields", [])
-
-        return any("=" in str(field) for field in extra_fields)
-
-    json_count = sum(
-        1
-        for entry in entries
-        if looks_like_json(entry)
-    )
+    json_count = sum(1 for e in entries if e.get("source") == "json")
 
     skipped_pct = round(
         len(skipped_lines) / total_lines * 100,

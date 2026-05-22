@@ -52,7 +52,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    args = _build_parser().parse_args()
+    parser = _build_parser()
+    args = parser.parse_args()
 
     if not os.path.isfile(args.log_file):
         msg = "Not a file" if os.path.exists(args.log_file) else "File not found"
@@ -61,8 +62,7 @@ def main() -> None:
         sys.exit(1)
 
     if args.top < 1:
-        print("--top must be 1 or greater.", file=sys.stderr)
-        sys.exit(1)
+        parser.error("--top must be 1 or greater")
 
     entries, skipped = parse_file(args.log_file)
 

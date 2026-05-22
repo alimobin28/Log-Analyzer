@@ -184,16 +184,13 @@ The format `2026/05/22 14:23:01` contains a space, so splitting the log line on 
 
 ## 5. Honest gap
 
-Right now, the timeline aggregation in `analyzer.py` buckets data only by `HH:MM` (minute-level). That works fine for short log files, but it breaks down when the data spans multiple days.
+In `src/parser.py` (line ~200), when a JSON log line is parsed and no response time key is found, `response_ms` silently defaults to `0.0`:
 
-For example, `09:00` on day 1 and `09:00` on day 2 get merged into the same bucket, which silently distorts the timeline. The program doesn't crash, but the visualization becomes misleading because different days are being treated as the same time slot.
+```python
+if response_ms is None:
+    response_ms = 0.0
+```
 
-If I had more time, I'd fix this by keying the timeline using the full timestamp, like `YYYY-MM-DD HH:MM`, so each event is uniquely placed in time.
+This means JSON entries with missing latency data are included in the `top_slow_endpoints` calculation with a 0ms response time, dragging down the per-endpoint average. An endpoint that genuinely averages 800ms could appear faster than it is if several JSON entries for the same path have no response time recorded. The report doesn't flag this at all there's no count of "entries with missing latency."
 
-On top of that, I'd add adaptive granularity:
-
-- Minute-level for logs under ~6 hours
-- Hour-level for logs under ~7 days
-- Day-level for anything longer
-
-The display would also adjust accordingly, showing the date only when the granularity changes instead of repeating it on every row.
+With another day, I'd change `response_ms` to `Optional[float]` in the schema, skip `None` values in `top_slow_endpoints`, and add a line to the parse quality report showing how many entries were excluded from latency calculations.

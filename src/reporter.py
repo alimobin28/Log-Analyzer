@@ -108,8 +108,13 @@ def print_report(stats: dict) -> None:
     timeline = stats.get("timeline") or {}
 
     if timeline:
-        items = list(timeline.items())[-20:]
+        all_items = list(timeline.items())
+        hidden = len(all_items) - 20
+        items = all_items[-20:]
         peak_t = max(c for _, c in items)
+
+        if hidden > 0:
+            console.print(f"  [dim]... {hidden} earlier buckets not shown[/dim]")
 
         for ts, cnt in items:
             ratio = cnt / peak_t if peak_t else 0
