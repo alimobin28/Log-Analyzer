@@ -1,17 +1,3 @@
-"""
-Production-grade log parser.
-
-Handles mixed-format server logs including:
-- multiple timestamp formats
-- JSON logs
-- malformed lines
-- missing/optional fields
-
-Guarantees:
-- never crashes on bad input
-- always returns structured output
-"""
-
 import json
 import re
 from datetime import datetime, timezone
