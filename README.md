@@ -19,7 +19,7 @@ A command-line tool that parses server log files and produces a clear, actionabl
 ## Requirements
 
 - Python 3.9 or higher
-- No external dependencies — uses stdlib only (`re`, `datetime`, `argparse`, `json`, `collections`)
+- [`rich`](https://github.com/Textualize/rich) for terminal output (installed via `requirements.txt`)
 
 ---
 
@@ -30,8 +30,10 @@ A command-line tool that parses server log files and produces a clear, actionabl
 git clone https://github.com/alimobin28/log-analyzer.git
 cd log-analyzer
 
+# 2. Install dependencies
+pip install -r requirements.txt
 
-# 2. Generate a sample log file
+# 3. Generate a sample log file
 python scripts/generate_logs.py --lines 5000 --output sample.log
 
 # 4. Run the analyzer
@@ -63,7 +65,7 @@ python main.py /var/log/app/access.log
 python main.py sample.log --top 20 --bucket hour
 
 # Run against a file with a different name — the tool doesn't care
-python main.py production-2024-03-15.log --top 5
+python main.py production-2026-05-22.log --top 5
 ```
 
 ---
@@ -82,7 +84,7 @@ python scripts/generate_logs.py --lines 10000 --output sample.log
 | `--output FILE` | `sample.log` | Output file path |
 
 The generator injects the following deviations at roughly 5–10% of lines:
-- Alternate timestamp formats (`2024/03/15 14:23:01`, `15-Mar-2024 14:23:01`, Unix epoch)
+- Alternate timestamp formats (`2026/05/22 14:23:01`, `15-Mar-2026 14:23:01`, Unix epoch)
 - Response times in different units (`0.142s`, bare integer `142`)
 - Missing or `-` status codes
 - Extra appended fields (quoted user-agent strings, referrers with spaces)
@@ -93,6 +95,8 @@ After generation it prints a breakdown of how many of each deviation type were i
 
 ---
 
+## Project Structure
+
 ```
 log-analyzer/
 ├── scripts/
@@ -100,12 +104,13 @@ log-analyzer/
 ├── src/
 │   ├── parser.py           # Parses log lines, handles all format variations
 │   ├── analyzer.py         # Aggregation and analysis functions
-│   └── reporter.py         # Formats and prints the terminal report
+│   └── reporter.py         # Formats and prints the terminal 
+
 ├── main.py                 # CLI entry point
 ├── requirements.txt
 ├── README.md
 └── ANSWERS.md
-
+```
 
 ## License
 

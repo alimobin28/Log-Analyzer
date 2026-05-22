@@ -11,16 +11,13 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
-# timestamp patterns — _parse_timestamp tries these top to bottom
-# epoch check comes first because it's the cheapest rejection
 
-# 2024-03-15T14:23:01Z  or  2024-03-15T14:23:01
 _RE_ISO = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})Z?$")
 
-# 2024/03/15 14:23:01
+# 2026/05/22 14:23:01
 _RE_SLASH = re.compile(r"^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})$")
 
-# 15-Mar-2024 14:23:01
+# 22-May-2026 14:23:01
 _RE_DMY = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}:\d{2}$")
 
 _RE_EPOCH = re.compile(r"^\d{10}$")
@@ -29,28 +26,27 @@ _RE_EPOCH = re.compile(r"^\d{10}$")
 _RE_RESPONSE = re.compile(r"^(\d+(?:\.\d+)?)(ms|s)?$", re.IGNORECASE)
 
 
-def _parse_timestamp(raw: str) -> Optional[datetime]:
-    """Try every known format; return None if nothing matches."""
+def _parse_timestamp(raw: str) -> Optional[tuple[datetime, str]]:
+    """Try every known format; return (datetime, format_name) or None."""
     raw = raw.strip()
 
     if _RE_EPOCH.match(raw):
-        return datetime.fromtimestamp(int(raw), tz=timezone.utc)
+        return datetime.fromtimestamp(int(raw), tz=timezone.utc), "epoch"
 
     if _RE_ISO.match(raw):
-        # strptime doesn't understand the trailing Z, so drop it first
         return datetime.strptime(raw.rstrip("Z"), "%Y-%m-%dT%H:%M:%S").replace(
             tzinfo=timezone.utc
-        )
+        ), "iso"
 
     if _RE_SLASH.match(raw):
         return datetime.strptime(raw, "%Y/%m/%d %H:%M:%S").replace(
             tzinfo=timezone.utc
-        )
+        ), "slash"
 
     if _RE_DMY.match(raw):
         return datetime.strptime(raw, "%d-%b-%Y %H:%M:%S").replace(
             tzinfo=timezone.utc
-        )
+        ), "dmy"
 
     return None
 
@@ -70,7 +66,7 @@ def _parse_plain_line(tokens: list[str]) -> Optional[dict]:
     Walk the token list and try to extract a structured log entry.
 
     The tricky part is that some timestamp formats contain a space
-    ("2024/03/15 14:23:01"), so after splitting on whitespace the timestamp
+    ("2026/05/22 14:23:01"), so after splitting on whitespace the timestamp
     occupies two slots instead of one. We try width=1 first, then width=2,
     and go with whichever actually parses.
     """
@@ -79,9 +75,10 @@ def _parse_plain_line(tokens: list[str]) -> Optional[dict]:
 
     for ts_width in (1, 2):
         ts_raw = " ".join(tokens[:ts_width])
-        ts = _parse_timestamp(ts_raw)
-        if ts is None:
+        result = _parse_timestamp(ts_raw)
+        if result is None:
             continue
+        ts, ts_fmt = result
 
         rest = tokens[ts_width:]
         if len(rest) < 5:
@@ -101,11 +98,11 @@ def _parse_plain_line(tokens: list[str]) -> Optional[dict]:
         if response_ms is None:
             return None
 
-        # user-agent strings get split by whitespace — stitch them back together
         extra_fields = _collect_extra_fields(extra_tokens)
 
         return {
             "timestamp": ts,
+            "ts_format": ts_fmt,
             "ip": ip,
             "method": method,
             "path": path,
@@ -168,9 +165,10 @@ def _parse_json_line(raw: str) -> Optional[dict]:
     ts_raw = obj.get("timestamp") or obj.get("time") or obj.get("ts")
     if ts_raw is None:
         return None
-    ts = _parse_timestamp(str(ts_raw))
-    if ts is None:
+    ts_result = _parse_timestamp(str(ts_raw))
+    if ts_result is None:
         return None
+    ts, ts_fmt = ts_result
 
     method = obj.get("method")
     path = obj.get("path") or obj.get("url") or obj.get("uri")
@@ -214,6 +212,7 @@ def _parse_json_line(raw: str) -> Optional[dict]:
 
     return {
         "timestamp": ts,
+        "ts_format": ts_fmt,
         "ip": ip,
         "method": method,
         "path": path,

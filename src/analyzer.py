@@ -196,8 +196,9 @@ def parse_quality_report(
         "skipped_pct": skipped_pct,
         "json_lines": json_count,
 
-        # Original timestamp format is lost after parsing
-        "alt_timestamp_formats": 0,
+        "alt_timestamp_formats": sum(
+            1 for e in entries if e.get("ts_format", "iso") != "iso"
+        ),
     }
 
 

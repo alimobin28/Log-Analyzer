@@ -53,17 +53,15 @@ STACK_TRACE_LINES = [
     "java.lang.RuntimeException: Unexpected EOF at parser.Parser.parse(Parser.java:201)",
 ]
 PARTIAL_WRITES = [
-    "2024-03-15T14:2",
+    "2026-05-22T14:2",
     "192.168.1.",
     "GET /api/use",
-    "2024-03-15T14:23:01Z 10.0.0.5",
+    "2026-05-22T14:23:01Z 10.0.0.5",
     "",  # the blank line is intentional mimics a logger that flushed mid-write
 ]
 
-# all timestamps are anchored to this date so the generated log feels like a
-# single real session rather than random noise scattered across years
 
-EPOCH_BASE = datetime(2024, 3, 15, 0, 0, 0, tzinfo=timezone.utc)
+EPOCH_BASE = datetime(2026, 5, 22, 0, 0, 0, tzinfo=timezone.utc)
 
 
 def random_ip() -> str:
