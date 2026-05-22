@@ -8,6 +8,13 @@ import argparse
 import os
 import sys
 
+from src.analyzer import (
+    error_summary,
+    parse_quality_report,
+    requests_over_time,
+    top_slow_endpoints,
+    traffic_by_ip,
+)
 from src.parser import parse_file
 from src.reporter import print_report
 
@@ -58,7 +65,23 @@ def main() -> None:
         sys.exit(1)
 
     entries, skipped = parse_file(args.log_file)
-    print_report(entries, skipped, top=args.top, bucket=args.bucket)
+
+    quality = parse_quality_report(entries, skipped)
+    errors  = error_summary(entries)
+    missing = errors.pop("missing", 0)
+
+    stats = {
+        "total_lines":    quality["total_lines"],
+        "parsed":         quality["parsed"],
+        "skipped":        quality["skipped"],
+        "slow_endpoints": top_slow_endpoints(entries, n=args.top),
+        "error_codes":    errors,
+        "missing_status": missing,
+        "top_ips":        traffic_by_ip(entries, n=args.top),
+        "timeline":       dict(requests_over_time(entries, bucket=args.bucket)),
+    }
+
+    print_report(stats)
 
 
 if __name__ == "__main__":

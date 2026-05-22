@@ -1,206 +1,126 @@
 """
-Format and print the log analysis results in the terminal.
-
-Each section is independent, so missing data (no errors, no IPs, etc.)
-shows a short note rather than an empty table or a crash.
+Terminal log dashboard using Rich.
+Renders stats safely with graceful fallbacks for missing data.
 """
 
-try:
-    from src.analyzer import (
-        top_slow_endpoints,
-        error_summary,
-        traffic_by_ip,
-        requests_over_time,
-        parse_quality_report,
-    )
+from datetime import datetime
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
-except ImportError:
+console = Console()
 
-    import os
-    import sys
-
-    sys.path.insert(
-        0,
-        os.path.join(os.path.dirname(__file__), "..")
-    )
-
-    from src.analyzer import (
-        top_slow_endpoints,
-        error_summary,
-        traffic_by_ip,
-        requests_over_time,
-        parse_quality_report,
-    )
+_IP_BAR = 20
+_CHART_W = 40
 
 
-LINE_WIDTH = 70
-BAR_CHAR = "#"
-BAR_WIDTH = 40
-
-
-def _header(title: str) -> None:
-
-    print(f"\n{'=' * LINE_WIDTH}")
-    print(title)
-    print(f"{'=' * LINE_WIDTH}")
-
-
-# Turns a request count into a proportional bar of # characters
-def _make_bar(count: int, max_count: int) -> str:
-
-    if max_count == 0:
+def _bar(count: int, peak: int, width: int) -> str:
+    # Builds proportional ASCII bar for simple visualization.
+    # Safely handles divide-by-zero cases.
+    if peak == 0:
         return ""
-
-    filled = round(count / max_count * BAR_WIDTH)
-
-    return BAR_CHAR * filled
+    return "#" * round(count / peak * width)
 
 
-def print_report(
-    entries: list,
-    skipped: list,
-    top: int = 10,
-    bucket: str = "minute",
-) -> None:
+def print_report(stats: dict) -> None:
     """
-    Print the full log analysis report.
+    Renders full log report from precomputed stats dict.
+    Each section safely handles missing or empty data.
     """
 
-    # Parse quality 
+    # Parse quality metrics
+    total = stats.get("total_lines", 0)
+    parsed = stats.get("parsed", 0)
+    skipped = stats.get("skipped", 0)
 
-    _header("Parse Quality")
+    parsed_pct = round(parsed / total * 100, 1) if total else 0.0
+    skipped_pct = round(skipped / total * 100, 1) if total else 0.0
 
-    quality = parse_quality_report(entries, skipped)
+    pct_color = "green" if parsed_pct >= 95 else "yellow" if parsed_pct >= 80 else "red"
 
-    parsed_pct = round(
-        100 - quality["skipped_pct"],
-        1,
-    )
+    row = Text()
+    row.append(f"Total Lines: {total}    ")
+    row.append(f"Parsed: {parsed} ({parsed_pct}%)", style=pct_color)
+    row.append(f"    Skipped: {skipped} ({skipped_pct}%)")
 
-    print(f"Total lines : {quality['total_lines']}")
-    print(f"Parsed      : {quality['parsed']} ({parsed_pct}%)")
-    print(f"Skipped     : {quality['skipped']} ({quality['skipped_pct']}%)")
+    console.print(Panel(row, title="Parse Quality", border_style="bright_blue"))
 
-    #Slow endpoints 
+    # Slow endpoints table
+    slow = stats.get("slow_endpoints") or []
 
-    _header(f"Top {top} Slow Endpoints")
-
-    slow = top_slow_endpoints(entries, n=top)
+    t1 = Table(title="Top Slow Endpoints", border_style="bright_blue")
+    t1.add_column("PATH", style="cyan", no_wrap=True)
+    t1.add_column("AVG ms", style="yellow", justify="right")
+    t1.add_column("MAX ms", style="red", justify="right")
+    t1.add_column("REQS", style="white", justify="right")
 
     if slow:
-
-        path_width = min(
-            max(len(path) for path, _, _, _ in slow),
-            40,
-        )
-
-        print(
-            f"{'Path':<{path_width}}  "
-            f"{'Avg ms':>8}  "
-            f"{'Max ms':>8}  "
-            f"{'Requests':>8}"
-        )
-
-        print(
-            f"{'-' * path_width}  "
-            f"{'-' * 8}  "
-            f"{'-' * 8}  "
-            f"{'-' * 8}"
-        )
-
-        for path, avg, peak, count in slow:
-
-            display_path = path
-
-            if len(display_path) > path_width:
-                display_path = display_path[:path_width - 2] + ".."
-
-            print(
-                f"{display_path:<{path_width}}  "
-                f"{avg:>8.1f}  "
-                f"{peak:>8.1f}  "
-                f"{count:>8}"
-            )
-
+        for i, (path, avg, peak, count) in enumerate(slow):
+            t1.add_row(path, f"{avg:.1f}", f"{peak:.1f}", str(count), style="bold" if i == 0 else "")
     else:
-        print("No endpoint timing data found")
+        t1.add_row("[dim]No data available[/dim]", "", "", "")
 
-    # Error summary
+    console.print(t1)
 
-    _header("Error Summary")
+    # Error breakdown
+    error_codes = stats.get("error_codes") or {}
+    missing_status = stats.get("missing_status", 0)
 
-    errors = error_summary(entries)
+    t2 = Table(title="Error Summary", border_style="bright_blue")
+    t2.add_column("STATUS", style="bold red", justify="right")
+    t2.add_column("COUNT", justify="right")
+    t2.add_column("% OF ERRORS", justify="right")
 
-    if errors:
-
-        missing = errors.pop("missing", 0)
-
-        if errors:
-
-            print(f"{'Status':>8}  {'Count':>8}")
-            print(f"{'-' * 8}  {'-' * 8}")
-
-            for code, count in sorted(errors.items()):
-
-                print(f"{code:>8}  {count:>8}")
-
-        if missing:
-
-            print(f"\nMissing status codes : {missing}")
-
+    if error_codes:
+        total_errors = sum(error_codes.values())
+        for code, cnt in sorted(error_codes.items()):
+            pct = round(cnt / total_errors * 100, 1) if total_errors else 0.0
+            t2.add_row(str(code), str(cnt), f"{pct}%")
     else:
-        print("No 4xx or 5xx errors found")
+        t2.add_row("[dim]No errors found[/dim]", "", "")
 
-    # ---------------- Top IPs ----------------
+    console.print(t2)
 
-    _header(f"Top {top} IP Addresses")
+    if missing_status > 0:
+        console.print(f"  Missing status codes: {missing_status}", style="dim italic")
 
-    ips = traffic_by_ip(entries, n=top)
+    # Top IP traffic
+    top_ips = stats.get("top_ips") or []
 
-    if ips:
+    t3 = Table(title="Top IPs by Traffic", border_style="bright_blue")
+    t3.add_column("IP ADDRESS")
+    t3.add_column("REQUESTS", justify="right")
+    t3.add_column("TRAFFIC")
 
-        ip_width = max(len(ip) for ip, _ in ips)
-
-        print(f"{'IP Address':<{ip_width}}  {'Requests':>8}")
-        print(f"{'-' * ip_width}  {'-' * 8}")
-
-        for ip, count in ips:
-
-            print(f"{ip:<{ip_width}}  {count:>8}")
-
+    if top_ips:
+        peak_ip = max(c for _, c in top_ips)
+        for ip, cnt in top_ips:
+            t3.add_row(ip, str(cnt), _bar(cnt, peak_ip, _IP_BAR))
     else:
-        print("No IP traffic data found")
+        t3.add_row("[dim]No data available[/dim]", "", "")
 
-    # ---------------- Traffic over time ----------------
+    console.print(t3)
 
-    _header(f"Traffic Over Time ({bucket})")
+    # Traffic timeline view
+    console.rule("[bold bright_blue] Traffic Timeline [/bold bright_blue]")
 
-    timeline = requests_over_time(entries, bucket=bucket)
+    timeline = stats.get("timeline") or {}
 
-    # Only show latest 20 buckets to keep output readable
-    buckets = (
-        timeline[-20:]
-        if len(timeline) > 20
-        else timeline
-    )
+    if timeline:
+        items = list(timeline.items())[-20:]
+        peak_t = max(c for _, c in items)
 
-    if buckets:
+        for ts, cnt in items:
+            ratio = cnt / peak_t if peak_t else 0
+            style = "dim" if ratio < 0.2 else "bold bright_white" if ratio > 0.8 else "white"
 
-        max_count = max(count for _, count in buckets)
-
-        label_width = max(len(ts) for ts, _ in buckets)
-
-        for timestamp, count in buckets:
-
-            bar = _make_bar(count, max_count)
-
-            print(
-                f"{timestamp:<{label_width}} "
-                f"|{bar:<{BAR_WIDTH}} "
-                f"{count}"
-            )
-
+            bar = _bar(cnt, peak_t, _CHART_W)
+            console.print(f"  {ts}  {bar:<{_CHART_W}}  {cnt} requests", style=style)
     else:
-        print("No traffic timeline data found")
+        console.print("  [dim]No timeline data available[/dim]")
 
-    print(f"\n{'=' * LINE_WIDTH}\n")
+    # Footer info
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    footer = f"Generated by log-analyzer | {now} | {stats.get('parsed', 0)} events"
+    console.print(f"\n[dim]{footer}[/dim]")
